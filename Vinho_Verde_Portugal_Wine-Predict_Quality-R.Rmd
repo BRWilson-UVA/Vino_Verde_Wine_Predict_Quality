@@ -1,0 +1,856 @@
+---
+title: "Vinho Verde Portugal Wine-Predicting Quality"
+author: 'Ben Wilson'
+date: "8/12/2021"
+output:
+  html_document:
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(gridExtra)
+library(tidyverse)
+library(corrplot)
+library(leaps)
+library(dplyr)
+library(ROCR)
+library(faraway)
+```
+
+# Executive Summary
+
+Vinho Verde comes from a small province in Northern Portugal known for its white, red, and rosé wines. These wines are known for their zapping acidity, carbonation, and lower alcohol content. This project provides an analysis and evaluation to explore how quality is related to the physicochemical and sensory variables and how such variables relate to one another. Our overall goal for this project is to use corresponding visualizations and regression to answer three questions about the wine focused on addressing the impact of attributes on the type of wine (white versus red), the quality of wine (scores 1-10) and how the wine ranks in quality score (high quality versus mid to low quality). The datasets used describe more than 6,000 red and white Vinho Verde wines with roughly 75% equating to white wines and 25% equating to red wines. Our dataset provided was clean and complete, so outside of consolidating the wines into a single file we proceeded to perform exploratory data analysis (EDA) through visualizations of the various relationships between the 12 attributes. From our EDA, the key learnings which influenced our modelling process included determining how several of the predictors related to one another on a surface level as well as identifying stark differences in the attributes representing wine quality for red and white. These learnings led our team to modelling red and white wine separately and examining each dataset for interactions between variables.  
+
+After performing a series of analyses on the data in order to answer our three questions, the following results were found: 
+
+* The color of wine can be predicted with 99% accuracy when using volatile acidity, citric acid, residual sugar, chlorides, free sulfur dioxide, total sulfur dioxide, density, alcohol, and quality rating as predictors. As citric acid, residual sugar, and total sulfur dioxide increase in amount, the log odds of a wine being white increase. As volatile acidity, chlorides, density, alcohol content, and quality increase in amount, the log odds of a wine being white decrease. 
+
+* The quality of wine on a 1-10 scale can be predicted using a combination of the original 12 predictors, with a different approach for red wines than white wines 
+
+    + Volatile acidity, chlorides, and total sulfur dioxide negatively affect the quality of both white and red wines. 
+
+    + Free sulfur dioxide, sulphates, and alcohol content positively affect the quality of both red and white wines. 
+
+    + White wine quality is also positively affected by its residual sugar and higher pH values, and it is negatively affected by fixed acidity. 
+
+    + An increase in pH of a red wine negatively affects its quality. 
+
+* Quality scores, high or mid-to-low, should also be predicted differently for red and white wines 
+
+    + Red wine scores can be predicted with 85.98% accuracy when using volatile acidity, chlorides, free sulfur dioxide, total sulfur dioxide, pH, sulphates, and alcohol content as predictors. Increases in volatile acidity, chlorides, and total sulfur dioxide increase the log odds of a wine being white. Increases in free sulfur dioxide, sulphates, and alcohol content decrease these odds.
+
+    + White wine scores can be predicted with 77.09% accuracy when using fixed acidity, volatile acidity, residual sugar, chlorides, free sulfur dioxide, total sulfur dioxide, pH, sulphates, and alcohol content as predictors. An increase in volatile acidity, chlorides and total sulfur dioxide increase log odds of a wine being white. Fixed acidity, residual sugar, free sulfur dioxide, pH, sulphates, and alcohol content decrease those odds when increased.  
+    
+In conclusion, we can state with a high degree of certainty, all else held equal, that we can predict the color and quality (in terms of high quality vs. low-to-mid quality) of Vinho Verde wine using the 12 physicochemical and sensory attributes provided. 
+
+## Research Questions
+
+The research questions we explored for the purposes of our study of Vinho Verda wine were divided into three parts given the nature of the data: 
+
+* Can we predict the color of wine (white versus red) based on the physicochemical and sensory attributes? 
+
+* How do the attributes of the wine impact the level of quality as a ranking? 
+
+* Which attributes will lead to high quality wine (score 7-10) versus low-to-mid quality wine (1-6)? 
+
+The attributes referenced include the physicochemical and sensory attributes as well as the numerical wine ranking. 
+
+
+# Data Description
+
+The wine quality dataset was sourced from the UCI Machine Learning Repository. Two datasets were included for the population: red and white Vinho Verde wine samples from the north of Portugal. Due to privacy and logistical circumstances, the datasets do not include information on the type of grapes nor the brand of wine. Attributes were subset into input variables based on physiochemical responses and output variables based on sensory data. The input variables consisted of the following attributes: 
+
+* Fixed acidity - Acids involved with wine which are fixed or unable to evaporate easily 
+
+* Volatile acidity - Amount of acetic acid within the wine (high levels may lead to vinegar taste)
+
+* Citric acidity - Adds ‘freshness’ and flavor to wines (generally found in small quantities) 
+
+* Residual sugar - Amount of sugar remaining after the fermentation process completes 
+
+* Chlorides - Amount of salt within the wine 
+
+* Free sulfur dioxide - Free form of SO2 that exists in equilibrium between molecular SO2 and biosulfite ion (prevents microbial growth and oxidation of wine) 
+
+* Total sulfur dioxide - Amount of free and bound forms of SO2 
+
+* Density - Observes density depending on the percent alcohol and sugar content 
+
+* PH - Describes how acidic or basic a wine is on a scale from 0 (very acidic) to 14 (very basic) 
+
+The output variables consisted of the following attributes: 
+
+* Quality- based on sensory data determines the quality of wine determines by a scale of (0-10) 
+
+# Exploratory Data Analysis (EDA)
+
+In order to assist our team in the investigation of the relationship between quality ranking and the associated physicochemical variables, we initially conducted a series of exploratory data analysis (EDA) steps to expand our understanding of the relationships and trends that exist. Additionally, we set out to understand what similarities high quality wine has with the given attributes versus low-to-mid quality wine.  
+
+Given that the red and white Portuguese Vinho Verde wine was provided in two separate data frames, our team initially consolidated each into a single frame for analysis throughout the project, creating a new ‘Color’ attribute in turn which identified the ‘red’ and ‘white’ color. Prior to developing a series of informative visualizations, our team deemed it necessary to provide categorical labels to the wine quality rankings which are determined by Semantic Scholar when using quality rankings 1-10. The categorical rankings include: 
+
+* Quality = 1-4: Undrinkable 
+
+* Quality = 5:  Pretty Bad 
+
+* Quality = 6: Fair 
+
+* Quality = 7: Quaffable 
+
+* Quality = 8: Very Good 
+
+* Quality = 9-10: Excellent 
+
+For our third question, we deemed those wines which ranked 7-10 as our high-quality wines whereas all other wines of a lower rank were considered low-to-mid quality wines. 
+
+```{r, echo=FALSE}
+reds = read.csv('wineQualityReds.csv', header=TRUE)
+whites = read.csv('wineQualityWhites.csv', header=TRUE)
+
+reds $color <- 'red'
+whites $color <- 'white'
+all <- rbind(reds, whites)
+```
+
+```{r, echo=FALSE, results=FALSE}
+drop = c('X', 'color')
+drop2 = c('X')
+reds = reds[,!(names(reds) %in% drop)]
+whites = whites[,!(names(whites) %in% drop)]
+all = all[,!(names(all) %in% drop2)]
+
+all_qual_cat <- all %>% 
+  mutate(qual_cat = case_when(quality < 5 ~ 'Undrinkable',
+                                quality < 6 ~ 'Pretty Bad',
+                                quality < 7 ~ 'Fair',
+                                quality < 8 ~ 'Quaffable',
+                                quality < 9 ~ 'Very Good',
+                                quality < 11 ~ 'Excellent'))
+
+ 
+
+reds_qual_cat <- reds %>%
+  mutate(qual_cat = case_when(quality < 5 ~ 'Undrinkable',
+                                quality < 6 ~ 'Pretty Bad',
+                                quality < 7 ~ 'Fair',
+                                quality < 8 ~ 'Quaffable',
+                                quality < 9 ~ 'Very Good',
+                                quality < 11 ~ 'Excellent'))
+
+ 
+
+whites_qual_cat <- whites %>%
+  mutate(qual_cat = case_when(quality < 5 ~ 'Undrinkable',
+                                quality < 6 ~ 'Pretty Bad',
+                                quality < 7 ~ 'Fair',
+                                quality < 8 ~ 'Quaffable',
+                                quality < 9 ~ 'Very Good',
+                                quality < 11 ~ 'Excellent'))
+```
+
+```{r, echo=FALSE}
+summary(all)
+```
+
+In reviewing the summarized consolidated data, initial observations determined that there were 1599 red wine scores versus 4898 white wine scores. Given the differences in population size as well as the differences we found in the physicochemical inputs between white and red wines, we noted the higher white wine observation count as an important point for further exploration during EDA. 
+
+Correlation of red wine attributes: 
+
+```{r, echo=FALSE, results=FALSE, fig.width = 8, fig.height = 5, warning=FALSE}
+corr_1 <- cor(reds[,c(1,2,3,4,5,6,7,8,9,10,11,12)])
+corrplot(corr_1, method="color")
+```
+
+
+Correlation of white wine attributes: 
+
+```{r, echo=FALSE, results=FALSE, fig.width = 8, fig.height = 5, warning=FALSE}
+corr_2 <- cor(whites[,c(1,2,3,4,5,6,7,8,9,10,11,12)])
+corrplot(corr_2, method="color")
+```
+
+
+Correlation of all wine attributes (red and white): 
+
+```{r, echo=FALSE, results=FALSE, fig.width = 8, fig.height = 5, warning=FALSE}
+corr_3 <- cor(all[,c(1,2,3,4,5,6,7,8,9,10,11,12)])
+corrplot(corr_3, method="color")
+```
+
+
+```{r, echo=FALSE, results=FALSE, fig.width = 6, fig.height = 4, warning=FALSE}
+#grid.arrange(corrplot1, corrplot2, corrplot3, ncol = 2, nrow = 2)
+#corrplot1
+#corrplot2
+#corrplot3
+```
+
+When examining red and white wine feature correlations, we saw a strong negative correlation between alcohol and density as well as a strong positive correlation between alcohol and quality. The second of the two surprised our team as we did not expect the level of alcohol to have an impact on the quality rating. A second strong positive correlation that we did happen to expect existed between free sulfur dioxide and total sulfur dioxide, given that as free sulfur dioxide increases, total sulfur dioxide increases proportionally. 
+
+In reviewing feature correlation for red wines, we saw a strong negative correlation between pH levels and fixed acidity and a strong positive correlation between citric acid and fixed acidity (as one acidity level increases so to does another) as well as density and fixed acidity. Saying as one type of acidity increases so does another, we saw to be incorrect with red wines though given a strong negative relationship between citric acidity and volatile acidity. The takeaway was that acidity will be a crucial factor in examining red wine color. 
+
+With white wines, unsurprisingly we saw a high correlation between residual sugar and density (white wine known for being higher in sugar) as well as a strong negative correlation between alcohol and density (as white wine is known less for its 'body' compared to red wine). The takeaway was that density will be a crucial factor in differentiating between white and red wine colors. The outcome from the correlation plots for our team was an understanding that multicollinearity may exist between pairs of attributes as well as that we may need to have multiple equations when predicting quality of wine given that high quality reds have a different balance of attributes compared to high quality whites.
+
+```{r, echo=FALSE, results=FALSE, fig.width = 6, fig.height = 4, fig.align='center', warning=FALSE}
+ggplot(all_qual_cat, aes(quality, fill = color)) +
+  geom_histogram(binwidth = 1, alpha = 0.5, position = 'identity')+
+  labs(title="Quality Ratings of Wines by Color",x="Quality", y = "Count")+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+From viewing the quality distributions by color of wine within a histogram, we saw a similar distribution of quality rankings per wine color. Although those attributes for white wine will have a greater weight given that white wine observations encompass 75% of total observations, we were reassured to discover that the quality rankings between colors remained evenly distributed. Additionally, the data appears to be fairly normally distributed with no clear skew impacting the quality rankings. 
+
+```{r, echo=FALSE, results=FALSE, fig.width = 10, fig.height = 6, warning=FALSE}
+bp1<-ggplot(all, aes(x=quality, y=fixed.acidity,color=color))+
+  geom_boxplot()+ labs(x="quality", y="fixed.acidity", title=" Fixed.Acidity Versus Quality ")+
+  theme(plot.title = element_text(hjust = 0.5, size = 12), legend.title = element_text(size=12))
+
+bp2<-ggplot(all, aes(x=quality, y=volatile.acidity,color=color ))+ 
+  geom_boxplot()+ labs(x="quality", y="volatile.acidity ", title=" Volatile Acidity Versus Quality")+
+  theme(plot.title = element_text(hjust = 0.5, size = 12), legend.title = element_text(size=12))
+
+bp3<-ggplot(all, aes(x=quality, y=citric.acid,color=color))+
+  geom_boxplot()+labs(x="quality", y="citric.acid", title=" Citric Acid Versus Quality")+
+  theme(plot.title = element_text(hjust = 0.5, size = 12), legend.title = element_text(size=12))
+
+bp4<-ggplot(all, aes(x=quality, y=residual.sugar,color=color))+
+  geom_boxplot()+labs(x="quality", y="residual.sugar", title=" Residual Sugar Versus Quality")+
+  theme(plot.title = element_text(hjust = 0.5, size = 12), legend.title = element_text(size=12))
+
+bp5<-ggplot(all, aes(x=quality, y=chlorides,color=color))+
+  geom_boxplot()+labs(x="quality", y="chlorides", title=" Chlorides Versus Quality")+
+  theme(plot.title = element_text(hjust = 0.5, size = 12), legend.title = element_text(size=12))
+
+bp6<-ggplot(all, aes(x=quality, y=free.sulfur.dioxide,color=color))+
+  geom_boxplot()+labs(x="quality", y="free.sulfur.dioxide", title=" Free Sulfur.Dioxide Versus Quality")+
+  theme(plot.title = element_text(hjust = 0.5, size = 12), legend.title = element_text(size=12))
+
+bp7<-ggplot(all, aes(x=quality, y=total.sulfur.dioxide,color=color))+
+  geom_boxplot()+labs(x="quality", y="total.sulfur.dioxide", title=" Total Sulfur Dioxide Versus Quality")+
+  theme(plot.title = element_text(hjust = 0.5, size = 12), legend.title = element_text(size=12))
+
+bp8<-ggplot(all, aes(x=quality, y=density,color=color))+
+  geom_boxplot()+labs(x="quality", y="density", title=" Density Versus Quality")+
+  theme(plot.title = element_text(hjust = 0.5, size = 12), legend.title = element_text(size=12))
+
+bp9<-ggplot(all, aes(x=quality, y=pH,color=color))+
+  geom_boxplot()+labs(x="quality", y="pH", title=" pH Versus Quality")+
+  theme(plot.title = element_text(hjust = 0.5, size = 12), legend.title = element_text(size=12))
+
+bp10<-ggplot(all, aes(x=quality, y=sulphates,color=color))+
+geom_boxplot()+
+labs(x="quality", y="sulphates", title=" Sulphates Versus Quality")+
+  theme(plot.title = element_text(hjust = 0.5, size = 12), legend.title = element_text(size=12))
+
+bp11<-ggplot(all, aes(x=quality, y=alcohol,color=color))+
+  geom_boxplot()+labs(x="quality", y="alcohol", title="Alcohol Versus Quality")+
+  theme(plot.title = element_text(hjust = 0.5, size = 12), legend.title = element_text(size=12))
+
+
+##produce the 4 boxplots in a 2 by 2 matrix
+grid.arrange(bp1, bp2, bp3, bp4, ncol = 2, nrow = 2)
+grid.arrange(bp5, bp6, bp7, bp8, ncol = 2, nrow = 2)
+grid.arrange(bp9, bp10, bp11, ncol = 2, nrow = 2)
+```
+
+We next further evaluated the distribution of our dataset based on a five number summary (minimum, Q1, median, Q3, and maximum) within boxplots for various attributes, differentiating for wine color. After running boxplots with the respective variables, we noted similar interactions between red and white wines for chlorides, alcohol, and sulphates. The interquartile range for alcohol, sulphates, and chlorides is approximately the same for both red and white wines. However, the median for red wines is slightly higher than that for white wines with sulphates and chlorides. We saw a similar distribution for the median of the alcohol versus quality boxplot as well with sulphates and chlorides presenting outliers in both red and white wines that caused variability in the distribution.  
+
+Although we note similarities between some attributes, the rest of the box plot distributions indicate significant variability in the distributions of red versus white wines. Attributes like sulfur dioxide, citric acid, residual sugar, and fixed acidity show the medians vary greatly in red and white wines and outliers are present in both. The interquartile range for sulfur dioxide, citric acid, residual sugar, and fixed acidity is also drastically different for both red and white wines.  
+
+Since the similar interactions could be due to a result of multicollinearity or variable interaction effects, we identified the need to test for such an issue within the feature selection process. Additionally, we chose to proceed with evaluating the red and white wine models separately when assessing quality as the attributes for each wine type appear materially different between each color. 
+
+
+```{r, echo=FALSE, results=FALSE, fig.width = 6, fig.height = 4, warning=FALSE, fig.align='center'}
+all_qual_cat$qual_cat <- factor(all_qual_cat$qual_cat,levels = c("Undrinkable", "Pretty Bad", "Fair", "Quaffable", "Very Good", "Excellent"))
+
+
+ggplot(all_qual_cat, aes(x = qual_cat)) +
+  geom_bar(aes(fill = color)) +labs(x="Wine Quality", y="# of Wines", title="# of Wines by Quality and Color")+
+  theme(plot.title = element_text(hjust = 0.5, size = 12), legend.title = element_text(size=12))
+```
+
+Similar to our distribution chart previously, our team noticed a fairly even distribution of red and white wines by wine quality. Additionally, when reviewing those wines that will appear in our high quality category (scores 7-10) versus low-to-mid quality category (1-6), the distribution evens out as well. Such even distributions provided us confidence in having sufficient sample sizes to perform our upcoming categorical regression without the need to oversample as can often be the case for low sample observations of one category. When reviewing the data by quality categories, we saw as well that it kept a fairly normal shape, with a slight bias toward more lower quality wines although not enough to be concerned with for the purposes of our modelling.
+
+# Model Development
+
+## Predicting Wine Color 
+
+Following our initial EDA to enhance our understanding of the data attributes relationships, we focused on solving our first question ‘Can we predict the color of wine (white versus red) based on its physiochemical and sensory attributes?’ Although we included a ‘Color’ attribute upon binding of datasets, we had to factor this column for the purposes of R reading it a binary attribute (0 or 1) for our logistic regression. Logistic regression was chosen for this analysis due to the problem being categorical in nature (predicting red or white).  
+
+The full wine population of red and white wine data was randomly split into train and test portions, 80% of observations splitting into train whereas 20% of observations splitting into test. This was done so that the model can train on the same attributes we would receive for future data while minimizing the effects of data discrepancies in order to understand the patterns that exist for determining whether the wine is of a red or white color. In performing the logistic regression, we conducted Wald tests on individual predictors. The predictors fixed.acidity and pH were removed due to low significance in producing an enhanced modelling output, resulting in the following  variable equation after nine modelling iterations:
+
+$color = 1701-6.445volatile.acidity + 3.373citric.acid + 0.9005residual.sugar -25.82chlorides -0.04934 free.sulfur.dioxide + 0.04662total.sulfur.dioxide -1691 density -1.704alcohol -0.4924quality$ 
+
+To review our model performance, our team used the Receiver Operating Characteristic (ROC), which tested the classification at all classification thresholds by plotting the True Positive against the False Positive rate, as well as the confusion matrix, visualizing how often our model confuses the two classes.
+
+```{r, echo=FALSE}
+# Split into training and testing data for whites, 80/20 split
+set.seed(18) ##for reproducibility to get the same split
+sample<-sample.int(nrow(all), floor(.80*nrow(all)), replace = F)
+wine.train<-all[sample, ] ##training data frame
+wine.test<-all[-sample, ] ##test data frame
+```
+
+```{r, echo=FALSE, results=FALSE}
+wine.train$color <- factor(wine.train$color)
+log_test <- glm(color~., family = "binomial", data=wine.train)
+summary(log_test)
+```
+
+```{r, echo=FALSE, results=FALSE}
+log <- glm(color~volatile.acidity+citric.acid+residual.sugar+chlorides+free.sulfur.dioxide+total.sulfur.dioxide+density+alcohol+quality, family = "binomial", data=wine.train)
+summary(log)
+```
+
+```{r, echo=FALSE, out.width = "80%", out.height="80%", fig.align='center'}
+preds <- predict(log, newdata=wine.test, type="response")
+rates <- prediction(preds, wine.test$color)
+roc_result <- performance(rates, measure = "tpr", x.measure = "fpr")
+plot(roc_result, main = "ROC curve")+
+  lines(x=c(0,1), y=c(0,1),col="red")
+
+```
+
+Area Under the Curve (AUC) Output
+```{r, echo=FALSE}
+performance(rates, measure = "auc")@y.values
+```
+
+Confusion Matrix Output
+```{r, echo=FALSE}
+table(wine.test$color, preds>0.5)
+```
+
+With our ROC curve reflecting a 99% performance when viewing the Area Under the Curve (AUC) metric (more on this metric in question 3), our model is almost perfectly predicting red versus white wine types. From the confusion matrix (using a 0.5 threshold) that it has a False Positive rate of 1% and a True Positive rate approaching 99%. The threshold of 0.5 was chosen as it is the default in industry to start our analysis and we did not deem a higher threshold necessary given the level of our risk for an incorrect prediction being quite low (wine type versus a high-risk prediction example of say cancer). Once again, from prior EDA review, we expected a high success rate in predicting the wine color given the trending differences in attributes for each wine color. Understanding this clearly from our model prediction though, we deemed it necessary to perform feature testing and selection next prior to predicting quality of red and white wines independently.  
+
+## Feature Testing
+
+Following our EDA, we discovered hints of multicollinearity while predicting wine color based on the physicochemical and sensory attributes, creating a need to look for interaction effects. An important note to address is that two modelling processes were developed to predict wine quality in our research question 2 and research question 3, one model for red wine and one model for white wine. The reason for two models was a result of the EDA performed where there was a clear distinction between the physicochemical and sensory attributes for each color wine. Additionally, from a contextual perspective, the attributes that tend to make a high-quality red wine (full body aka density, low sugar content, bold flavor) are different from those that make a high-quality white wine (balanced sugar content, subtle flavor, crisp florescent taste). This decision to balance two models through feature selection then became the basis for our third question in predicting high-quality wine. The reason for testing whether one or more predictor variables in our multiple regression model are linearly predicted from other variables with a high degree of accuracy is to simplify our model with fewer attributes and enhance our remaining variable coefficients once the effect is removed. 
+
+### White Wines
+
+To test for multicollinearity, we identified the variance inflation factors (VIFs) for each predictor, which calculate the severity of multicollinearity through an estimation of the response variables against each other parameter. Our team used a threshold of 5 to determine if the predictor should be removed. For white wine, a high VIF of 28.23 was produced for density as well as a high VIF of residual sugar of 12.6. Density was dropped and residual sugar was kept to view the results upon being rerun which led to a desired result less than 5 (VIF of 2.2), confirming the role of density in multicollinearity. Additionally, no leveraged observations were returned from the analysis of variance (ANOVA) test performed, testing the impact of each variable by comparing the means of different samples, which would cause influential differences to our model for white wine. 
+
+
+VIFs for All Predictors of White Wine
+```{r, echo=FALSE}
+white_full = lm(quality~., data=whites)
+vif(white_full)
+```
+
+```{r, echo=FALSE, results=FALSE}
+white_full_2 = lm(quality~ fixed.acidity + volatile.acidity + citric.acid + residual.sugar + 
+    chlorides + free.sulfur.dioxide + total.sulfur.dioxide + 
+     pH + sulphates + alcohol, data=whites)
+vif(white_full_2)
+```
+
+
+### Red Wines
+
+In testing for multicollinearity within red wine, our VIF test produced a similar high VIF for fixed acidity (score of 7.767) which was removed, leading to no further observations producing a similar high VIF score exceeding the threshold of 5. Additionally, no leveraged observations were returned from the ANOVA test performed which would cause influential differences to our model for red wine. 
+
+
+VIFs for All Predictors of Red Wine
+```{r, echo=FALSE}
+red_full = lm(quality~., data=reds)
+vif(red_full)
+```
+
+```{r, echo=FALSE, results=FALSE}
+#Removing fixed acidity due to a large VIF value.
+
+red_full_2 = lm(quality~ volatile.acidity + citric.acid + residual.sugar + 
+    chlorides + free.sulfur.dioxide + total.sulfur.dioxide + 
+    density + pH + sulphates + alcohol, data=reds)
+vif(red_full_2)
+```
+
+```{r, echo=FALSE}
+#After removing fixed acidity, we no longer see VIF scores appearing above 5.
+
+#formatting data for selection processes
+regnull_red = lm(quality~1, data=reds)
+```
+
+
+## Predicting Wine Quality 
+
+After concluding our initial question, we examined our second question ‘How do the attributes of the wine impact the level of quality as a ranking?’ Given that quality is a numerical ranking, our team leveraged linear regression as a starting point to fit a model against the predictors of quality. In order to do so, we employed automated search procedures for feature selection using three directions (backward elimination, forward selection, and stepwise regression) to reduce the number of potential models considered. This meant declaring an intercept-only model as well as a full model with all predictors (except those removed for red or white during the feature selection process previously). For forward selection, model attributes were repeatedly added to the intercept only model and any prior predictors until the Akaike information criterion (AIC), an estimator of prediction error and measure of statistical model quality, could not be reduced further whereas the backward elimination begins with the full model and repeatedly removes predictors until our AIC is minimized and step-wise combines each type to arrive at a minimal AIC.  
+
+### White Wine
+
+```{r, echo=FALSE}
+#formatting 'all' data for selection processes
+regnull_white = lm(quality~1, data=whites)
+```
+
+```{r, echo=FALSE, results=FALSE}
+#Forward Selection Model for White Wine Quality
+
+#forward selection for all
+step(regnull_white, scope=list(lower=regnull_white, upper=white_full_2), direction="forward")
+```
+
+```{r, echo=FALSE, results=FALSE}
+#Backward Selection Model for White Wine Quality
+
+# backward selection for all
+step(white_full_2, scope=list(lower=regnull_white, upper=white_full_2), direction="backward")
+```
+
+```{r, echo=FALSE, results=FALSE}
+#Stepwise Selection Model for White Wine Quality
+
+#stepwise selection for all data
+step(white_full_2, scope=list(lower=regnull_white, upper=white_full_2), direction="both")
+```
+
+For white wines, forward, backward, and stepwise selection all produced the same models. This model included the following nine predictors: fixed.acidity ,volatile.acidity, residual.sugar, chlorides, free.sulfur.dioxide, total.sulfur.dioxide, pH, sulphates, and alcohol.  
+
+We proceeded to fit a multiple linear regression manually to see if this method would produce a model different from the one generated through the previous selection processes. When determining whether individual predictors had a significant effect on quality, we set a threshold for alpha of 0.05. From a multiple linear regression including all predictors, citric acid, chlorides, and total.sulfur.dioxide were removed as they were deemed to be insignificant. After dropping the insignificant predictors, the model was refitted. pH was found to be insignificant as well and was dropped from the model. The model was refitted once more, and the remaining predictors were all significant. 
+
+The remaining predictors included fixed.acidity, volatile.acidity, residual.sugar, free.sulfur.dioxide, sulphates, and alcohol with an adjusted $R^2$ value of 0.2699. The $R^2$ value for the step function method as a comparison was 0.2714. It is important to note that the only predictors that vary from the t-test and step function approach were chlorides, total.sulfur.dioxide, and pH. Given that our goal is to optimize the model for high performance, we proceeded with the higher $R^2$ value from the step function process for research question 3.  If the model were to be scaled and used for production purposes, we would have next performed a cost-benefit analysis as to the impact of running a model with a few additional variables that enhances the model by ~1% to determine whether the benefit of additional performance power were worth the cost of running the model.
+
+Therefore, our final model chosen had the following predictors: fixed.acidity ,volatile.acidity, residual.sugar , chlorides, free.sulfur.dioxide, total.sulfur.dioxide, pH, sulphates, and alcohol. Given that output, our final linear regression equation was: 
+
+$quality = 2.0615- 0.05140fixed.acidity-1.9526volatile.acidity+ 0.02560residual.sugar -0.9721chlorides+ 0.004761free.sulfur.dioxide- 0.0008759total.sulfur.dioxide + 0.1665pH + 0.4175sulphates+ 0.3624alcohol$ 
+
+we can interpret that these attributes are significant in impacting the level of quality in white wines. Generally, we see that fixed acidity, volatile acidity, chlorides, and total sulfur dioxide all have a negative effect on quality rating, while residual sugar, free sulfur dioxide, pH, sulphates, and alcohol have a positive effect on quality rating.
+
+
+```{r,echo=FALSE, results=FALSE}
+#determine which predictors to drop
+model_1 = lm(quality~., data=whites)
+summary(model_1)
+```
+
+```{r, echo=FALSE, results=FALSE}
+#drop citric acid, chlorides, and total.sulfur.dioxide, refit
+model_2 = lm(quality~fixed.acidity + volatile.acidity + residual.sugar + 
+    free.sulfur.dioxide + pH + sulphates + alcohol, data=whites)
+summary(model_2)
+```
+
+```{r, echo=FALSE, results=FALSE}
+#drop pH, refit
+model_3 = lm(quality~ fixed.acidity + volatile.acidity + residual.sugar + 
+    free.sulfur.dioxide + sulphates + alcohol, data = whites)
+summary(model_3)
+```
+
+```{r, echo=FALSE, results=FALSE}
+model_4 = lm(quality ~ fixed.acidity + volatile.acidity + residual.sugar + 
+    chlorides + free.sulfur.dioxide + total.sulfur.dioxide + 
+    pH + sulphates + alcohol, data = whites)
+summary(model_4)
+```
+
+```{r, echo=FALSE, out.width = "80%", out.height="80%", fig.align='center'}
+yhat1<-model_4$fitted.values
+res1<-model_4$residuals
+##add to data frame
+Data2<-data.frame(whites,yhat1,res1)
+
+ggplot(whites, aes(x=yhat1,y=res1))+
+  geom_point()+
+  geom_hline(yintercept=0, color="red")+
+  labs(x="Fitted Price",
+       y="Residuals",
+       title="Residual Plot of Multiple Linear Regression for White Wines")+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r, echo=FALSE, out.width = "80%", out.height="80%", fig.align='center'}
+qqnorm(res1)
+qqline(res1, col="red")
+```
+
+```{r, echo=FALSE,out.width = "80%", out.height="80%", fig.align='center'}
+acf(res1, main="ACF Plot of Residuals for White Wines")
+```
+
+```{r, echo=FALSE, results=FALSE}
+vif(model_4)
+```
+
+```{r, echo=FALSE, out.width = "80%", out.height="80%", fig.align='center'}
+student.res_white<-rstandard(model_4)
+plot(model_4$fitted.values,student.res_white,
+main="Studentized Residuals",
+ylim=c(-4.5,4.5))
+```
+
+```{r, echo=FALSE, results=FALSE}
+n<-dim(whites)[1]
+p<-9
+crit<-qt(1-0.05/(2*n), n-p-1)
+student.res_white[abs(student.res_white)>crit]
+student.res_white
+```
+
+As a check of our model prior to proceeding, our team produced a Residual Plot for the multiple linear regression, which represents the differences between observed and predicted values (residuals) of our observation and highlights any points not evenly distributed around the horizontal axis. The pattern of the chart depicted no issues with residuals (evenly distributed residual observations), nor did the Normal Q-Q plot, depicting any variance of observations from a theoretically perfect linear relationship, or the Studentized Residuals Plot, which examines the residuals without a constant variance. Our ACF plot shows that the observations are not as independent as we would like them to be, which may be a result of sampling from the same location. However, there is not enough dependence to believe that has a major impact on the model. 
+
+```{r, echo=FALSE, results=FALSE}
+##leverages
+lev<-lm.influence(model_4)$hat
+lev[lev>2*p/n]
+```
+
+```{r, echo=FALSE, results=FALSE}
+DFBETAS<-dfbetas(model_4)
+abs(DFBETAS)>2/sqrt(n)
+```
+
+```{r, echo=FALSE, results=FALSE}
+DFFITS<-dffits(model_4)
+DFFITS[abs(DFFITS)>2*sqrt(p/n)]
+```
+
+```{r, echo=FALSE, results=FALSE}
+COOKS<-cooks.distance(model_4)
+COOKS[COOKS>qf(0.5,p,n-p)]
+```
+
+```{r, echo=FALSE}
+anova(model_4, white_full_2)
+```
+
+Upon confirmation of the ANOVA results identifying no other issues, as a final test to confirm observations are not impacted materially by leverages and influential points, our team used Levene's test (testing whether samples are of equal variance), Cook's distance (measuring the effect of deleting a given variable), DFFITs (measuring how much the fitted value of each observation changes as it is removed from the model), and DFBETAs (which measures how much the estimated coefficient changes when each observation is removed from the regression). Each test produced no observations of note to remove. A partial f-test was conducted to confirm that our model with a reduced number of predictors is useful compared to a full model, including all features (excluding those removed due to multicollinearity). Due to the high p-value associated with this test (0.7634), we can reject the null hypothesis and confirm that the reduced model should be used.
+
+
+### Red Wine
+
+```{r, echo=FALSE, results=FALSE}
+#Forward Selection Model for Red Wine Quality
+
+#forward selection for reds
+step(regnull_red, scope=list(lower=regnull_red, upper=red_full_2), direction="forward")
+```
+
+```{r, echo=FALSE, results=FALSE}
+#Backward Selection Model for Red Wine Quality
+
+# backward selection for reds
+step(red_full_2, scope=list(lower=regnull_red, upper=red_full_2), direction="backward")
+```
+
+```{r, echo=FALSE, results=FALSE}
+#Stepwise Selection Model for Red Wine Quality
+
+#stepwise selection for red data
+step(red_full_2, scope=list(lower=regnull_red, upper=red_full_2), direction="both")
+```
+
+We began our red wine modelling process by creating an intercept only model, and a regression which includes all possible predictors other than fixed acidity (which was removed during feature selection). We then initiated the step function automated search procedures referenced previously. Each direction results in the same seven predictors of volatile acidity, chlorides, free sulfur dioxide, total sulfur dioxide, pH, sulphates, and alcohol as optimal for predicting quality of red wine. Next, we created a model using t-tests and dropping predictors with p-values greater than 0.05. Selecting predictors this way results in optimal predictors of volatile acidity, free sulfur dioxide, total sulfur dioxide, pH, sulphates, and alcohol. Note that the only difference between the t-test approach and the step function is the chlorides predictor. However, we see that the step function approach results in an $R^2$ of 0.3567 while the t-test approach has an $R^2$ of 0.3466. We are optimizing for higher performance, so we select the model from using the step function. Our main predictors for quality of red wines are therefore: volatile acidity, chlorides, free sulfur dioxide, total sulfur dioxide, pH, sulphates, and alcohol. 
+
+```{r,echo=FALSE, results=FALSE}
+#determine which predictors to drop
+red_1 = lm(quality~., data=reds)
+summary(red_1)
+```
+
+```{r, echo=FALSE, results=FALSE}
+#drop density, fixed.acidity, residual.sugar, citric.acid, refit
+red_2 = lm(quality~volatile.acidity+citric.acid+chlorides+free.sulfur.dioxide+total.sulfur.dioxide+pH+
+               sulphates+alcohol, data=reds)
+summary(red_2)
+```
+
+```{r, echo=FALSE, results=FALSE}
+#drop chlorides, refit
+red_3 = lm(quality~volatile.acidity+citric.acid+free.sulfur.dioxide+total.sulfur.dioxide+
+               pH+sulphates+alcohol, data = reds)
+summary(red_3)
+```
+
+```{r, echo=FALSE, results=FALSE}
+#drop citric acid, refit
+red_4 = lm(quality~volatile.acidity+free.sulfur.dioxide+total.sulfur.dioxide+
+               pH+sulphates+alcohol, data = reds)
+summary(red_4)
+```
+
+```{r, echo=FALSE, results=FALSE}
+# Getting r-squared for the model spit out by forward, backward, and stepwise selection
+red_5 = lm(formula = quality ~ volatile.acidity + chlorides + free.sulfur.dioxide + 
+    total.sulfur.dioxide + pH + sulphates + alcohol, data = reds)
+summary(red_5)
+```
+
+$quality = 4.4301-1.0128volatile.acidity -2.0178chlorides + 0.005077free.sulfur.dioxide -0.003482total.sulfur.dioxide -0.4827 pH + 0.8827sulphates + 0.2893alcohol$
+
+In general, we see that volatile acidity, chlorides, total sulfur dioxide, and pH have a negative effect on quality while free sulfur dioxide, sulphates, and alcohol have a positive effect on quality.
+
+```{r, echo=FALSE, out.width = "80%", out.height="80%", fig.align='center'}
+# Chose the model from forward, backward, and stepwise selection, Residual Plot
+yhat2<-red_5$fitted.values
+res2<-red_5$residuals
+##add to data frame
+Data3<-data.frame(reds,yhat2,res2)
+
+ggplot(reds, aes(x=yhat2,y=res2))+
+  geom_point()+
+  geom_hline(yintercept=0, color="red")+
+  labs(x="Fitted Price",
+       y="Residuals",
+       title="Residual Plot of Multiple Linear Regression for Red Wines")+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r, echo=FALSE, out.width = "80%", out.height="80%", fig.align='center'}
+qqnorm(res2)
+qqline(res2, col="red")
+```
+
+```{r, echo=FALSE, out.width = "80%", out.height="80%", fig.align='center'}
+acf(res2, main="ACF Plot of Residuals for Red Wines")
+```
+
+```{r, echo=FALSE, results=FALSE}
+vif(red_5)
+```
+
+Once more our team produced the Residual Plot, Normal Q-Q Plot, and Studentized Residuals Plot without highlighting residuals of issue. Similar to white wines, our ACF plot shows that the observations are not as independent as we would like them to be. However, there is not enough dependence to believe that has a major impact on the model. Additionally, Levene's test, Cook's distance, DFFIT, and DFBETA tests were performed again with no observations highlighted for inquiry or removal. Since multicollinearity was reduced to a non-material level (given that it can never be entirely removed from a model) for red or white wine as confirmed by the VIF results and review of prior correlation plots during EDA, our team proceeded with the model development. 
+
+
+```{r, echo=FALSE, results=FALSE, out.width = "80%", out.height="80%", fig.align='center'}
+student.res<-rstandard(red_5)
+plot(red_5$fitted.values,student.res,
+main="Studentized Residuals",
+ylim=c(-4.5,4.5))
+```
+
+```{r, echo=FALSE, results=FALSE}
+n<-dim(reds)[1]
+p<-7
+crit<-qt(1-0.05/(2*n), n-p-1)
+student.res[abs(student.res)>crit]
+student.res
+```
+
+```{r, echo=FALSE, results=FALSE}
+##leverages
+lev<-lm.influence(red_5)$hat
+lev[lev>2*p/n]
+```
+
+```{r, echo=FALSE, results=FALSE}
+DFBETAS<-dfbetas(red_5)
+abs(DFBETAS)>2/sqrt(n)
+```
+
+```{r, echo=FALSE, results=FALSE}
+DFFITS<-dffits(red_5)
+DFFITS[abs(DFFITS)>2*sqrt(p/n)]
+```
+
+```{r, echo=FALSE, results=FALSE}
+COOKS<-cooks.distance(red_5)
+COOKS[COOKS>qf(0.5,p,n-p)]
+```
+
+```{r, echo=FALSE}
+anova(red_5, red_full_2)
+```
+
+As was done for white wines, we conducted a partial f-test to confirm that our model with a reduced number of predictors is useful compared to a full model, including all features (excluding those removed due to multicollinearity). Due to the high p-value associated with this test (0.6249), we can reject the null hypothesis and confirm that the reduced model should be used.
+
+## Predicting High Quality 
+
+Once our team identified the feature selection required for examining the quality of wines as part of our second research question, we produced a logistic regression to answer our final research question ‘Which attributes will lead to high quality wine (score 7-10) versus low-to-mid quality wine (1-6)?’ In order to prepare the data for the regression, a binary attribute labelled ‘qual_cat’ was created and factored to categorize high quality wines (score 7-10) versus low to mid quality wines (1-6) as defined arbitrarily by our team.
+
+### Red Wine
+
+```{r, echo=FALSE}
+reds_qual_pred <- reds %>%
+  mutate(quality = case_when(quality < 7 ~ 'low',
+                                 quality < 11 ~ 'high'))
+reds_qual_pred$quality <- factor(reds_qual_pred$quality)
+
+sample<-sample.int(nrow(reds), floor(.80*nrow(reds)), replace = F)
+red_wine.train<-reds_qual_pred[sample, ] ##training data frame
+red_wine.test<-reds_qual_pred[-sample, ] ##test data frame
+```
+
+To fit a logistic regression model to our red wine data, we started by once more splitting the data into training and testing sets (size of 80% and 20% respectively) as was done previously for predicting wine color although this time with the subset of red wine only observations. The model was fit using the same predictors identified as producing the optimal model for our linear model with research question 2 in order to predict wine quality, this time using our training set.  
+
+```{r, echo=FALSE, results=FALSE}
+red_log <- glm(quality~ volatile.acidity + chlorides + free.sulfur.dioxide + 
+    total.sulfur.dioxide + pH + sulphates + alcohol, 
+               family = "binomial", data=red_wine.train)
+summary(red_log)
+```
+
+```{r, echo=FALSE, out.width = "80%", out.height="80%", fig.align='center'}
+preds <- predict(red_log, newdata=red_wine.test, type="response")
+rates <- prediction(preds, red_wine.test$quality)
+roc_result <- performance(rates, measure = "tpr", x.measure = "fpr")
+plot(roc_result, main = "ROC curve for Red Wines")+
+  lines(x=c(0,1), y=c(0,1),col="red")
+```
+Following the initial model being produced, we used the trained model to predict how well our model performs overall using split test data.  The false positive rate of the model, where our model predicts that the test observation is a high-quality red wine when it is not (and vice-versa), against the true positive rate, where our model correctly predicts a high-quality red wine to be of high quality (and vice-versa), were plotted to form the ROC curve in order to assess model performance. Additionally, the ROC curve provided our team confirmation that the regression outperforms random guessing (depicted by the red linear line within the plot) for categorizing high-quality red wines by looking at the area under the ROC curve (AUC) aggregating to 0.8607 out of 1. The model is as follows: 
+
+$log(\frac{\hat{\pi}}{1-\hat{\pi}}) = 5.1204 + 3.6526volatile.acidity + 6.9133chlorides - 0.0161free.sulfur.dioxide + 0.0151total.sulfur.dioxide   + 2.2362pH - 3.1342sulphates - 1.0170alcohol$
+
+Area Under the Curve (AUC) Output
+```{r, echo=FALSE}
+performance(rates, measure = "auc")@y.values
+```
+
+Confusion Matrix Output
+```{r, echo=FALSE}
+table(red_wine.test$quality, preds>0.3)
+```
+
+```{r, echo=FALSE, results=FALSE}
+red_log_full <- glm(quality~., family = "binomial", data =red_wine.train)
+TS <- red_log_full$null.deviance-red_log_full$deviance
+1-(pchisq(TS,7))
+```
+
+With a threshold of 0.3 defined by our team for guiding the confusion matrix in summarizing predicted results of our classification model, our confusion matrix resulted in an error rate of 0.1402, an accuracy rate of 0.8598, a false positive rate of 0.9167 and a false negative rate of 0.0037. It is worth noting that the confusion matrix results would differ given an adjusted threshold indicative of the level of risk in predicting observations incorrectly in favor of enhanced model performance. As the outputs from our model do not provide high-risk if incorrect (unlike for example incorrectly predicting cancer results), our team accepted more risk of possible incorrect predictions in favor of increased performance by using a lower threshold.  
+
+To further assess our model and determine whether all model predictors are representative of the red wine data population as produced by our data, our team ran a goodness of fit, chi-square test. Our null hypothesis was established that all the beta variables in our model were equal to zero whereas our alternative hypothesis was that at least one of these coefficients was not zero. By calculating a delta G squared test statistic and comparing it with a chi squared distribution with seven degrees of freedom, we found a test statistic of 319 with a p-value of 0. To summarize, given the p-value of 0 our team rejected the null hypothesis and concluded that our 7-predictor model should be chosen over the intercept-only model.  
+
+### White Wine
+
+```{r, echo=FALSE}
+whites_qual_pred <- whites %>%
+  mutate(quality = case_when(quality < 7 ~ 'low',
+                                 quality < 11 ~ 'high'))
+whites_qual_pred$quality <- factor(whites_qual_pred$quality)
+
+set.seed(18) ##for reproducibility to get the same split
+sample<-sample.int(nrow(whites), floor(.80*nrow(whites)), replace = F)
+white_wine.train<-whites_qual_pred[sample, ] ##training data frame
+white_wine.test<-whites_qual_pred[-sample, ] ##test data frame
+```
+
+Similar to the red wine modelling process, our team split the white wine data into train and test sets for performing the model fitting process. Based on the estimated linear regression model, the odds of a wine being of high-quality increased as volatile acidity, chlorides, total sulfur dioxide increase. Our final logistic regression equation for white wines is as follows:  
+
+$log(\frac{\hat{\pi}}{1-\hat{\pi}}) = 13.8310 - 0.02815fixed.acidity  + 3.5331 volatile.acidity - 0.04687residual.sugar + 17.4986chlorides - 0.01344free.sulfur.dioxide + 0.004342total.sulfur.dioxide - 1.171841pH - 1.4192sulphates - 0.8674alcohol$  
+
+```{r, echo=FALSE, results=FALSE}
+white_log <- glm(quality~fixed.acidity + volatile.acidity + residual.sugar + 
+    chlorides + free.sulfur.dioxide + total.sulfur.dioxide + 
+    pH + sulphates + alcohol, family = "binomial", data=white_wine.train)
+summary(white_log)
+```
+
+```{r, echo=FALSE, out.width = "80%", out.height="80%", fig.align='center'}
+preds <- predict(white_log, newdata=white_wine.test, type="response")
+rates <- prediction(preds, white_wine.test$quality)
+roc_result <- performance(rates, measure = "tpr", x.measure = "fpr")
+plot(roc_result, main = "ROC curve for White Wines")+
+  lines(x=c(0,1), y=c(0,1),col="red")
+```
+
+Next, a ROC curve plot was produced to determine the performance of the model in classifying observations correctly within the test data split. The further the curve is from the diagonal line and the closer it is to the coordinate point (0,1) then the better the model is at classifying observations correctly. Since our model is indicative of being closer to the (0,1) coordinate, our model outperforms random chance. 
+
+Area Under the Curve (AUC) Output
+```{r, echo=FALSE,}
+performance(rates, measure = "auc")@y.values
+```
+
+Confusion Matrix Output
+```{r, echo=FALSE,}
+table(white_wine.test$quality, preds>0.3)
+```
+
+```{r, echo=FALSE, results=FALSE}
+white_log_full <- glm(quality~., family = "binomial", data =white_wine.train)
+TS <- white_log_full$null.deviance-white_log_full$deviance
+1-(pchisq(TS,7))
+```
+
+Our white wine model AUC levels were computed to be 0.766, meaning that the regression continues to outperform random guessing. With a threshold of 0.03, our confusion matrix resulted in an error rate of 0.2291 with an accuracy rate of 0.7709. Our FPR rate was 0.9358 and our FNR rate was 0.0052.   
+
+For the final goodness of fit test, our null hypothesis was defined as all the beta variables are equal to zero whereas the alternative hypothesis was that at least one of the coefficients was not equal to zero. Upon calculation, the test statistic was $\Delta{G^2} = 811.4406$ with a p-value equal to 0. In summary, we reject the null hypothesis as the data supports the claim that our model is useful, compared to the intercept only model. 
+
+# Results & Conclusions 
+
+## Model Interpretations & Context 
+
+### Research Question 1 
+
+The selected model for research question 1 was developed using the following predictor variables and equation:  
+
+$color = 1701-6.445volatile.acidity + 3.373citric.acid + 0.9005residual.sugar -25.82chlorides -0.04934 free.sulfur.dioxide + 0.04662total.sulfur.dioxide -1691 density -1.704alcohol -0.4924quality$ 
+
+This reflected a ROC curve AUC performance of 99% and a confusion matrix FPR of 1% and TPR of 99%. Given the final logistic regression equation, we can interpret the model as, when predicting the color of wine holding all else constant, that there is a positive relationship between citric acid, residual sugar, and total sulfur dioxide whereas volatile acidity, chlorides, free sulfur dioxide, density, alcohol, and quality have a negative relationship with predicting the color of wine. 
+
+### Research Question 2 
+
+For research question 2, two models were chosen to differentiate the prediction for white and red wine. The final model for red wine was chosen due to its superior adjusted R-squared. The model was developed using the following predictor variables and equation:   
+
+$quality = 4.43-1.0128(volatile.acidity) - 2.0178(chlorides) +0.005(free.sulfur.dioxide) - .0035(total.sulfur.dioxide) -0.4827(pH) + 0.8827(sulphates) + 0.2893(alcohol)$.  
+
+Given the final linear regression equation, we can interpret that assuming all other variables remain constant, volatile acidity, chlorides and pH have a deleterious effect on the quality of red wine, while sulfur dioxide, sulphates and alcohol have a small positive effect. 
+
+The final model for white wine was developed using the following predictor variables and equation: 
+
+$quality = 2.06-0.051(fixed.acidity)-1.9523(volatile.acidity) + 0.0256(residual.sugar)- 0.9721(chlorides) +0.00476(free.sulfur.dioxide) - 0.00088(total.sulfur.dioxide) - 0.16645(pH) + 0.4175(sulphates) +   0.3624(alcohol)$.  
+
+Given the final linear regression equation, we can interpret that residual sugar, free sulfur dioxide, sulphates, and alcohol have a positive effect on the quality of white wine whereas fixed acidity, volatile acidity, chlorides, total sulfur dioxide, and pH have a negative impact on the quality of white wines. 
+
+### Research Question 3 
+
+The final selected logistic regression models for research question 3 used to determine high quality wine for red and white wines can be seen as follows:
+
+**Red Wine**
+
+Our final red wine model allows us to conclude that all other variables being held constant, volatile acidity, chlorides, total sulfur dioxide and pH levels have a positive effect on determining quality of red wine, while free sulfur dioxide, sulphates and alcohol have a negative effect. Each coefficient can be interpreted in the following way, all else being equal, for a one unit increase in pH the odds of red wine being classified as high quality is multiplied by exp(2.2362) =  9.3577. Finally, the model has a final AUC performance of 0.861. 
+
+$log(\frac{\hat{\pi}}{1-\hat{\pi}}) = 5.1204 + 3.6526volatile.acidity + 6.9133chlorides - 0.0161free.sulfur.dioxide + 0.0151total.sulfur.dioxide   + 2.2362pH - 3.1342sulphates - 1.0170alcohol$ 
+
+**White Wine**
+
+Our final white wine model allows us to conclude that all other variables being held constant, volatile acidity, chlorides and total sulfur dioxide have a positive effect on determining quality of white wine, while fixed acidity, residual sugar, free sulfur dioxide, sulphates, and alcohol have a negative effect. Once again, coefficients can be interpreted in the following way, all else being equal, for a one unit increase in pH the odds of red wine being classified as high quality is multiplied by exp(-1.1718) = 0.3098. Finally, the model has a final AUC performance of 0.766.  
+
+
+$log(\frac{\hat{\pi}}{1-\hat{\pi}}) = 13.8310 - 0.02815fixed.acidity  + 3.5331 volatile.acidity - 0.04687residual.sugar + 17.4986chlorides - 0.01344free.sulfur.dioxide + 0.004342total.sulfur.dioxide - 1.171841pH - 1.4192sulphates - 0.8674alcohol$ 
+
+## Model Assumptions 
+
+Our models for the three research questions were developed using the following assumptions: 
+
+* Sample - The red and white sample data received from the UCI Machine Learning Repository in order to develop the given data used for the project was produced without error or bias. 
+
+* Independence - Observations within the sample dataset are independent of one another. 
+
+* Homoscedasticity - The variance of the residual is the same for any value of the predictive variable. 
+
+* Normality - Observations of the predictive and response variables are normally distributed. 
+
+### Logistic regression 
+
+* Response variable is a Bernoulli random variable:						 
+
+    + Our random variable was quality where $P(y_i =1)=\pi_i$ and $P(y_i =0)=1-\pi_i$	 
+
+### MLR and SLR Regression Assumptions  
+
+$\epsilon$ i.i.d $~N(0, \sigma^2)$
+
+* For each value of x, the errors have mean 0 for both red and white wines 	 
+
+* For each value of x, the errors have constant variance 	 
+
+* The observations are independent for both red and white wines.		 
+
+* For each value of x, the errors follow a normal distribution for both red and white wines.   
+
+# References
+* Vinho Verde - `https://winefolly.com/deep-dive/vinho-verde-the-perfect-poolside-wine-from-portugal/#:~:text=Vinho%20Verde%20comes%20from%20a,a%20great%20choice%20for%20summer`
+
+* UCI Machine Learning Repository - `https://archive.ics.uci.edu/ml/datasets/wine+quality`)
+
+* Semantic Scholar - `https://pdfs.semanticscholar.org/9ffc/11cd9bbe3f715e0f536fe3b789a60b112397.pdf`
